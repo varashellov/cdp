@@ -16,6 +16,7 @@ import (
 type session struct {
 	ID       target.SessionID
 	TargetID target.ID
+	init     chan struct{}
 	conn     *rpcc.Conn
 	recvC    chan []byte
 	send     func([]byte) error
@@ -36,6 +37,8 @@ func (s *session) WriteRequest(r *rpcc.Request) error {
 
 // ReadResponse implements rpcc.Codec.
 func (s *session) ReadResponse(r *rpcc.Response) error {
+	<-s.init
+
 	select {
 	case m := <-s.recvC:
 		return json.Unmarshal(m, r)
@@ -86,10 +89,10 @@ func dial(ctx context.Context, id target.ID, tc *cdp.Client) (s *session, err er
 		TargetID: id,
 		ID:       reply.SessionID,
 		recvC:    make(chan []byte, 1),
+		init:     make(chan struct{}),
 		send: func(data []byte) error {
+			<-s.init
 			// TODO(maf): Use async invocation.
-			// This context is unavailable until s.conn is assigned,
-			// but no messages will be sent before that happens.
 			return tc.Target.SendMessageToTarget(s.conn.Context(),
 				target.NewSendMessageToTargetArgs(string(data)).
 					SetSessionID(s.ID))
@@ -109,6 +112,7 @@ func dial(ctx context.Context, id target.ID, tc *cdp.Client) (s *session, err er
 	if err != nil {
 		return nil, err
 	}
+	close(s.init)
 
 	return s, nil
 }
