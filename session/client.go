@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/mafredri/cdp"
 	"github.com/mafredri/cdp/protocol/target"
@@ -69,8 +70,8 @@ func (sc *Client) watch(ev *sessionEvents, sessionCreated <-chan *session) {
 				if isClosing(err) {
 					return
 				}
-				// TODO(maf): Remove panic.
-				panic(err)
+				// TODO(maf): Remove logging.
+				fmt.Printf("Client.watch: %v\n", err)
 			}
 
 			if s, ok := sessions[m.SessionID]; ok {
@@ -84,8 +85,8 @@ func (sc *Client) watch(ev *sessionEvents, sessionCreated <-chan *session) {
 				if isClosing(err) {
 					return
 				}
-				// TODO(maf): Remove panic.
-				panic(err)
+				// TODO(maf): Remove logging.
+				fmt.Printf("Client.watch: %v\n", err)
 			}
 
 			if s, ok := sessions[m.SessionID]; ok {
