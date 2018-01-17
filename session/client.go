@@ -52,6 +52,10 @@ func (sc *Client) watch(ev *sessionEvents, sessionCreated <-chan *session) {
 	isClosing := func(err error) bool {
 		switch cdp.ErrorCause(err) {
 		case rpcc.ErrConnClosing:
+			// Cleanup, the underlying connection was closed
+			// before the Client and the Client context does
+			// not inherit from rpcc.Conn.
+			sc.Close()
 		case context.Canceled:
 		default:
 			return false
@@ -124,7 +128,10 @@ func (sc *Client) watch(ev *sessionEvents, sessionCreated <-chan *session) {
 // by Dial.
 func NewClient(c *cdp.Client) (*Client, error) {
 	sc := &Client{c: c, sC: make(chan *session)}
-	sc.ctx, sc.cancel = context.WithCancel(context.Background())
+
+	// TODO(mafredri): Inherit the context from rpcc.Conn in cdp.Client.
+	// cdp.Client does not yet expose the context, nor rpcc.Conn.
+	sc.ctx, sc.cancel = context.WithCancel(context.TODO())
 
 	ev, err := newSessionEvents(sc.ctx, c)
 	if err != nil {
