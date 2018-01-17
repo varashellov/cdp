@@ -105,7 +105,13 @@ func (sc *Client) watch(ev *sessionEvents, sessionCreated <-chan *session) {
 				// amount of time. Blocking here can potentially
 				// delay other session messages but that should
 				// not happen.
-				s.Write([]byte(m.Message))
+				err = s.Write([]byte(m.Message))
+				if err != nil {
+					delete(sessions, s.ID)
+				}
+			} else {
+				// TODO(maf): Remove logging.
+				fmt.Printf("Client.watch: orphan message: %s\n", m.Message)
 			}
 		}
 	}

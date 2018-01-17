@@ -52,8 +52,14 @@ func (s *session) ReadResponse(r *rpcc.Response) error {
 func (s *session) Conn() *rpcc.Conn { return s.conn }
 
 // Write forwards a target message to the session connection.
-func (s *session) Write(data []byte) {
-	s.recvC <- data
+// When write returns an error, the session is closed.
+func (s *session) Write(data []byte) error {
+	select {
+	case s.recvC <- data:
+		return nil
+	case <-s.conn.Context().Done():
+		return s.conn.Context().Err()
+	}
 }
 
 // Close closes the underlying *rpcc.Conn.
