@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/mafredri/cdp"
@@ -11,6 +12,9 @@ import (
 
 // Client establishes session connections to targets.
 type Client struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+
 	c  *cdp.Client
 	sC chan *session
 }
@@ -26,15 +30,19 @@ func (sc *Client) Dial(ctx context.Context, id target.ID) (*rpcc.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	sc.sC <- s
+	select {
+	case sc.sC <- s:
+	case <-sc.ctx.Done():
+		s.Close()
+		return nil, errors.New("Dial: Client is closed")
+	}
 	return s.Conn(), nil
 }
 
 // Close closes the Client and all active sessions. All rpcc.Conn
 // created by Dial will be closed.
 func (sc *Client) Close() error {
-	// TODO(maf): Make Close safe to be called multiple times.
-	close(sc.sC)
+	sc.cancel()
 	return nil
 }
 
@@ -42,23 +50,25 @@ func (sc *Client) watch(ev *sessionEvents, sessionCreated <-chan *session) {
 	defer ev.Close()
 
 	isClosing := func(err error) bool {
-		if cdp.ErrorCause(err) == rpcc.ErrConnClosing {
-			return true
+		switch cdp.ErrorCause(err) {
+		case rpcc.ErrConnClosing:
+		case context.Canceled:
+		default:
+			return false
 		}
-		return false
+		return true
 	}
 
 	sessions := make(map[target.SessionID]*session)
+	defer func() {
+		for _, ss := range sessions {
+			ss.Close()
+		}
+	}()
+
 	for {
 		select {
-		case s, ok := <-sessionCreated:
-			// Check if Client was closed.
-			if !ok {
-				for _, ss := range sessions {
-					ss.Close()
-				}
-				return
-			}
+		case s := <-sessionCreated:
 			sessions[s.ID] = s
 
 		// Checking detached should be sufficient for monitoring the
@@ -101,17 +111,18 @@ func (sc *Client) watch(ev *sessionEvents, sessionCreated <-chan *session) {
 	}
 }
 
-// NewClient creates a new session client. The context is not inherited
-// by Client.
+// NewClient creates a new session client.
 //
 // The cdp.Client will be used to listen to events and invoke commands
 // on the Target domain. It will also be used by all rpcc.Conn created
 // by Dial.
-func NewClient(ctx context.Context, c *cdp.Client) (*Client, error) {
-	sc := &Client{c: c, sC: make(chan *session, 1)}
+func NewClient(c *cdp.Client) (*Client, error) {
+	sc := &Client{c: c, sC: make(chan *session)}
+	sc.ctx, sc.cancel = context.WithCancel(context.Background())
 
-	ev, err := newSessionEvents(ctx, c)
+	ev, err := newSessionEvents(sc.ctx, c)
 	if err != nil {
+		sc.Close()
 		return nil, err
 	}
 
@@ -132,11 +143,11 @@ func newSessionEvents(ctx context.Context, c *cdp.Client) (ev *sessionEvents, er
 		}
 	}()
 
-	ev.detached, err = c.Target.DetachedFromTarget(nil)
+	ev.detached, err = c.Target.DetachedFromTarget(ctx)
 	if err != nil {
 		return nil, err
 	}
-	ev.message, err = c.Target.ReceivedMessageFromTarget(nil)
+	ev.message, err = c.Target.ReceivedMessageFromTarget(ctx)
 	if err != nil {
 		return nil, err
 	}

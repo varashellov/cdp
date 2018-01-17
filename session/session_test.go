@@ -40,7 +40,7 @@ func TestClient(t *testing.T) {
 
 	c := cdp.NewClient(conn)
 
-	sc, err := session.NewClient(ctx, c)
+	sc, err := session.NewClient(c)
 	if err != nil {
 		t.Error(err)
 	}
