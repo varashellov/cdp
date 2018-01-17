@@ -16,11 +16,12 @@ import (
 type session struct {
 	ID       target.SessionID
 	TargetID target.ID
-	init     chan struct{}
-	conn     *rpcc.Conn
 	recvC    chan []byte
 	send     func([]byte) error
 	detach   func()
+
+	init chan struct{} // Protect conn from early read.
+	conn *rpcc.Conn
 }
 
 // Ensure that session implements rpcc.Codec.
