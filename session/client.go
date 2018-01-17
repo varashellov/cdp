@@ -148,8 +148,8 @@ type sessionEvents struct {
 	message  target.ReceivedMessageFromTargetClient
 }
 
-func newSessionEvents(ctx context.Context, c *cdp.Client) (ev *sessionEvents, err error) {
-	ev = new(sessionEvents)
+func newSessionEvents(ctx context.Context, c *cdp.Client) (events *sessionEvents, err error) {
+	ev := new(sessionEvents)
 	defer func() {
 		if err != nil {
 			ev.Close()
@@ -187,5 +187,5 @@ func (ev *sessionEvents) Close() (err error) {
 			}
 		}
 	}
-	return nil
+	return err
 }
